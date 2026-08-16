@@ -1,6 +1,6 @@
 # Cloudflare-ZeroTrust-Gateway-API-CLI
 
-Private-repo GitOps CLI for **Cloudflare Zero Trust Gateway** allowlists and blocklists.
+GitOps CLI for **Cloudflare Zero Trust Gateway** allowlists and blocklists.
 
 Files in git are the **desired state**. `compile` fetches sources, folds child domains, and writes a snapshot. After you review that snapshot, `apply` aligns Gateway lists and rules whose names start with `gateway-list`. GitHub Actions compiles weekly; **it does not change Cloudflare unless you opt in**.
 

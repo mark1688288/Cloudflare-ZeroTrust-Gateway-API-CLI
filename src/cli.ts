@@ -31,8 +31,6 @@ Phase 9–11:
   apply    PATCH owned lists + upsert policy pack (--dry-run writes nothing)
   why      explain one domain from the compiled snapshot
   suggested  last-week top blocked DNS → allowlist/suggested.txt (never personal)
-
-See roadmap.txt.
 `;
 
 async function main(argv: string[]): Promise<number> {

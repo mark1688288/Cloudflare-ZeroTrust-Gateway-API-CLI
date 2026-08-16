@@ -8,11 +8,11 @@ const workflow = readFileSync(resolve(repoRoot, ".github/workflows/sync.yml"), "
 
 test("workflow never checkouts an upstream list manager", () => {
   assert.doesNotMatch(workflow, /mrrfv\/cloudflare-gateway-pihole-scripts/);
-  assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /actions\/checkout@v7/);
 });
 
 test("apply uses the compile artifact and does not compile again", () => {
-  assert.match(workflow, /actions\/download-artifact@v4/);
+  assert.match(workflow, /actions\/download-artifact@v8/);
   assert.match(workflow, /name: gateway-list-snapshot/);
   const applyBlock = workflow.slice(workflow.indexOf("\n  apply:"));
   assert.match(applyBlock, /node src\/cli\.ts apply/);
