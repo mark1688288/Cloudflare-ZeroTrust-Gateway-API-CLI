@@ -150,15 +150,28 @@ cd Cloudflare-ZeroTrust-Gateway-API-CLI
 npm install
 cp .env.example .env   # token / account id; needed for lists / diff / apply / suggested
 
+node src/cli.ts
+```
+
+That opens a shell. Type a command, then Enter:
+
+```
+gateway-list> compile
+gateway-list> summary
+gateway-list> lists
+gateway-list> diff
+gateway-list> why ads.google.com
+gateway-list> suggested
+gateway-list> apply --dry-run
+gateway-list> apply
+gateway-list> help
+gateway-list> exit
+```
+
+One-shot form still works for scripts and GitHub Actions (`node src/cli.ts compile`, and so on). `npm test` runs the suite.
+
+```bash
 node src/cli.ts --help
-node src/cli.ts compile
-node src/cli.ts summary        # Job Summary vs the previous desired
-node src/cli.ts lists          # read Gateway lists/rules (needs .env)
-node src/cli.ts diff           # desired.json vs live lists; drift is still exit 0
-node src/cli.ts why ads.google.com
-node src/cli.ts suggested      # last week's blocked domains → allowlist/suggested.txt (never personal)
-node src/cli.ts apply --dry-run
-node src/cli.ts apply          # write owned gateway-list* lists/rules
 npm test
 ```
 
@@ -200,6 +213,7 @@ The fork then compiles against your Cloudflare account. It cannot use this repos
 ## Commands
 
 ```
+gateway-list                              interactive shell
 gateway-list compile [--config config.yaml]
 gateway-list summary [--config config.yaml]
 gateway-list lists   [--config config.yaml]
@@ -208,6 +222,8 @@ gateway-list apply   [--config config.yaml] [--dry-run]
 gateway-list why     <domain>
 gateway-list suggested
 ```
+
+In the shell the commands are the same (`compile`, `summary`, `lists`, `diff`, `apply`, `why <domain>`, `suggested`), plus `help` and `exit`.
 
 ## License
 

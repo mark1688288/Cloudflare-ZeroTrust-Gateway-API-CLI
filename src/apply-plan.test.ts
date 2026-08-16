@@ -149,7 +149,7 @@ test("planIsNoop when live already matches desired", () => {
         precedence: 2000,
         action: "block",
         enabled: true,
-        traffic: "any(dns.security_category[*] in {68 80 83 89 109 131 133 151})",
+        traffic: "any(dns.security_category[*] in {68 80 83 131 151 187 191})",
       },
       {
         id: "R2",

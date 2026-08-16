@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { CloudflareApiError } from "./cf-client.ts";
 import { applyCommand } from "./commands/apply.ts";
@@ -13,6 +14,7 @@ import { CredentialsError } from "./env.ts";
 const USAGE = `gateway-list — Cloudflare Zero Trust Gateway list CLI
 
 Usage:
+  node src/cli.ts                              interactive shell
   node src/cli.ts compile [--config config.yaml]
   node src/cli.ts summary [--config config.yaml]
   node src/cli.ts lists   [--config config.yaml]
@@ -21,6 +23,8 @@ Usage:
   node src/cli.ts why     <domain>
   node src/cli.ts suggested [--config config.yaml]
   node src/cli.ts --help
+
+In the shell, type the same commands, or help / exit.
 
 Phase 9–11:
   compile  fetches remotes + compiles into snapshots/desired.json
@@ -33,60 +37,156 @@ Phase 9–11:
   suggested  last-week top blocked DNS → allowlist/suggested.txt (never personal)
 `;
 
-async function main(argv: string[]): Promise<number> {
-  const { values, positionals } = parseArgs({
+type Defaults = { configPath: string };
+
+const PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h", default: false },
+  config: { type: "string" },
+  "dry-run": { type: "boolean", default: false },
+} as const;
+
+function tokenize(line: string): string[] {
+  const tokens: string[] = [];
+  const pattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  for (const match of line.matchAll(pattern)) {
+    tokens.push(match[1] ?? match[2] ?? match[3] ?? "");
+  }
+  return tokens;
+}
+
+function parseArgv(argv: string[]) {
+  return parseArgs({
     args: argv,
     allowPositionals: true,
-    options: {
-      help: { type: "boolean", short: "h", default: false },
-      config: { type: "string", default: "config.yaml" },
-      "dry-run": { type: "boolean", default: false },
-    },
+    options: PARSE_OPTIONS,
   });
+}
 
-  if (values.help || positionals.length === 0) {
+function printCaught(error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message);
+  if (error instanceof CloudflareApiError) return error.exitCode;
+  if (error instanceof CredentialsError) return error.exitCode;
+  return 1;
+}
+
+async function runCommand(argv: string[], defaults: Defaults): Promise<number> {
+  let values: ReturnType<typeof parseArgv>["values"];
+  let positionals: string[];
+  try {
+    ({ values, positionals } = parseArgv(argv));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+
+  if (values.help) {
     process.stdout.write(USAGE);
     return 0;
   }
 
   const [command, ...rest] = positionals;
-  const configPath = values.config ?? "config.yaml";
-
-  switch (command) {
-    case "compile":
-      return compileCommand({ configPath });
-    case "summary":
-      return summaryCommand({ configPath });
-    case "lists":
-      return listsCommand({ configPath });
-    case "diff":
-      return diffCommand({ configPath });
-    case "apply":
-      return applyCommand({ configPath, dryRun: Boolean(values["dry-run"]) });
-    case "why": {
-      const domain = rest[0] ?? "";
-      if (!domain) {
-        console.error("usage: node src/cli.ts why <domain>");
-        return 1;
-      }
-      return whyCommand({ domain, configPath });
-    }
-    case "suggested":
-      return suggestedCommand({ configPath });
-    default:
-      console.error(`unknown command: ${command}`);
-      process.stderr.write(USAGE);
+  if (!command || command === "help" || command === "?") {
+    if (!command) {
+      console.error("type a command (help for a list)");
       return 1;
+    }
+    process.stdout.write(USAGE);
+    return 0;
+  }
+
+  const configPath = values.config ?? defaults.configPath;
+
+  try {
+    switch (command) {
+      case "compile":
+        return await compileCommand({ configPath });
+      case "summary":
+        return await summaryCommand({ configPath });
+      case "lists":
+        return await listsCommand({ configPath });
+      case "diff":
+        return await diffCommand({ configPath });
+      case "apply":
+        return await applyCommand({ configPath, dryRun: Boolean(values["dry-run"]) });
+      case "why": {
+        const domain = rest[0] ?? "";
+        if (!domain) {
+          console.error("usage: why <domain>");
+          return 1;
+        }
+        return await whyCommand({ domain, configPath });
+      }
+      case "suggested":
+        return await suggestedCommand({ configPath });
+      case "exit":
+      case "quit":
+        return 0;
+      default:
+        console.error(`unknown command: ${command}`);
+        process.stderr.write(USAGE);
+        return 1;
+    }
+  } catch (error) {
+    return printCaught(error);
   }
 }
 
+async function runRepl(defaults: Defaults): Promise<number> {
+  const input = process.stdin;
+  const output = process.stdout;
+  const tty = Boolean(input.isTTY);
+  const prompt = tty ? "gateway-list> " : "";
+
+  if (tty) output.write("gateway-list — type a command, or help / exit\n");
+
+  const rl = createInterface({ input, output, prompt, terminal: tty });
+  if (tty) {
+    rl.on("SIGINT", () => {
+      output.write("\n");
+      rl.close();
+    });
+    rl.prompt();
+  }
+
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (tty) rl.prompt();
+      continue;
+    }
+    if (trimmed === "exit" || trimmed === "quit") break;
+
+    await runCommand(tokenize(trimmed), defaults);
+    if (tty) rl.prompt();
+  }
+
+  rl.close();
+  return 0;
+}
+
+async function main(argv: string[]): Promise<number> {
+  let values: ReturnType<typeof parseArgv>["values"];
+  let positionals: string[];
+  try {
+    ({ values, positionals } = parseArgv(argv));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+
+  if (values.help) {
+    process.stdout.write(USAGE);
+    return 0;
+  }
+
+  const defaults: Defaults = { configPath: values.config ?? "config.yaml" };
+  if (positionals.length === 0) return runRepl(defaults);
+  return runCommand(argv, defaults);
+}
+
 try {
-  const code = await main(process.argv.slice(2));
-  process.exitCode = code;
+  process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  if (error instanceof CloudflareApiError) process.exitCode = error.exitCode;
-  else if (error instanceof CredentialsError) process.exitCode = error.exitCode;
-  else process.exitCode = 1;
+  process.exitCode = printCaught(error);
 }

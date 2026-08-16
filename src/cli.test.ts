@@ -96,6 +96,47 @@ policies:
   assert.deepEqual(desired.remote.fetched, []);
 });
 
+test("--help prints usage and does not start the shell", () => {
+  const result = runCli(["--help"]);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /interactive shell/);
+  assert.match(result.stdout, /compile/);
+});
+
+test("no args starts a shell; help and exit", () => {
+  const result = spawnSync(process.execPath, [cli], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: "help\nexit\n",
+    timeout: 10_000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /interactive shell/);
+  assert.match(result.stdout, /compile/);
+});
+
+test("shell unknown command stays open until exit", () => {
+  const result = spawnSync(process.execPath, [cli], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: "nope\nexit\n",
+    timeout: 10_000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /unknown command: nope/);
+});
+
+test("shell why without a domain does not quit the session", () => {
+  const result = spawnSync(process.execPath, [cli], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: "why\nexit\n",
+    timeout: 10_000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /usage: why <domain>/);
+});
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
