@@ -1,4 +1,4 @@
-# cloudflare-zero-trust-gateway-list-CLI
+# Cloudflare-ZeroTrust-Gateway-API-CLI
 
 Private-repo GitOps CLI for **Cloudflare Zero Trust Gateway** allowlists and blocklists.
 
