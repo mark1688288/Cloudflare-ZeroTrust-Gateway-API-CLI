@@ -170,9 +170,9 @@ npm test
 
 One domain per line. Lines starting with `#`, `//`, or `!` are comments; a trailing `#` / `//` is stripped too.
 
-## GitHub Actions (private repo)
+## GitHub Actions
 
-1. Use this repository.
+1. Use this repository, or a fork (see below).
 2. Secrets:
    - `CLOUDFLARE_API_TOKEN`
 3. Variables:
@@ -182,10 +182,20 @@ One domain per line. Lines starting with `#`, `//`, or `!` are comments; a trail
    - Every Monday 03:00 UTC: `compile` + `suggested` + Job Summary + upload the snapshot artifact
    - `workflow_dispatch`: checking apply writes the **artifact's** `desired.json` to Cloudflare
    - Scheduled apply also requires `AUTO_APPLY=true`; a tripped safety guard fails the job
-   - No `pull_request` trigger, so a fork PR cannot run apply
+   - No `pull_request` trigger: a PR *into this repository* cannot run compile or apply here. That is not your fork's own Actions (see below).
    - A push to `main` that touches `src/`, `config.yaml`, allowlist, or blocklist compiles only — it does not apply
 
 Leave `AUTO_APPLY` off at first. Remote sources change every week; read the Job Summary, then run `workflow_dispatch` with apply checked.
+
+### Fork
+
+GitHub copies the workflow file but does not enable it, and does not copy secrets or variables. After you fork:
+
+1. Open the **Actions** tab and enable workflows.
+2. Enable **Sync Gateway lists**. The Monday schedule stays disabled on a fork until you do.
+3. Add your own `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
+
+The fork then compiles against your Cloudflare account. It cannot use this repository's credentials.
 
 ## Commands
 
