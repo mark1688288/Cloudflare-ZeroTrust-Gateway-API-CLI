@@ -198,9 +198,3 @@ gateway-list apply   [--config config.yaml] [--dry-run]
 gateway-list why     <domain>
 gateway-list suggested
 ```
-
-## Docs
-
-- [`roadmap.txt`](roadmap.txt) — what might come next
-- [`feasibility_study.txt`](feasibility_study.txt) — notes on the Gateway API and why there is an Allow policy
-
