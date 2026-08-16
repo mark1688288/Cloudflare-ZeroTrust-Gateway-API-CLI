@@ -2,6 +2,7 @@
   "name": "Cloudflare-ZeroTrust-Gateway-API-CLI",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "GitOps CLI for Cloudflare Zero Trust Gateway allow/block lists",
   "type": "module",
   "engines": {

@@ -198,3 +198,7 @@ gateway-list apply   [--config config.yaml] [--dry-run]
 gateway-list why     <domain>
 gateway-list suggested
 ```
+
+## License
+
+[MIT](LICENSE) © mark1688288
