@@ -204,6 +204,3 @@ gateway-list suggested
 - [`roadmap.txt`](roadmap.txt) — what might come next
 - [`feasibility_study.txt`](feasibility_study.txt) — notes on the Gateway API and why there is an Allow policy
 
-## License
-
-Private repository. All rights reserved unless you add a license later.
