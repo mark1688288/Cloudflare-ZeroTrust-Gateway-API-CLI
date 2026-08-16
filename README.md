@@ -146,7 +146,7 @@ Each list holds at most `items_per_list` items (default 1000). If the traffic fi
 ## Local
 
 ```bash
-cd cloudflare-zero-trust-gateway-list-CLI
+cd Cloudflare-ZeroTrust-Gateway-API-CLI
 npm install
 cp .env.example .env   # token / account id; needed for lists / diff / apply / suggested
 

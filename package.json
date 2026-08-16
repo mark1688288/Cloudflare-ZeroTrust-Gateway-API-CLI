@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare-zero-trust-gateway-list-cli",
+  "name": "Cloudflare-ZeroTrust-Gateway-API-CLI",
   "version": "0.0.0",
   "private": true,
   "description": "GitOps CLI for Cloudflare Zero Trust Gateway allow/block lists",
