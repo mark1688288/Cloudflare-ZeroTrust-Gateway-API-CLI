@@ -1,0 +1,149 @@
+name: Sync Gateway lists
+
+on:
+  schedule:
+    # Weekly, Monday 03:00 UTC.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply the compiled snapshot to Cloudflare"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "config.yaml"
+      - "allowlist/**"
+      - "blocklist/**"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/sync.yml"
+
+concurrency:
+  group: gateway-list-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore previous desired snapshot
+        uses: actions/cache/restore@v6
+        with:
+          path: snapshots/previous/desired.json
+          key: gateway-list-desired-${{ github.run_id }}
+          restore-keys: |
+            gateway-list-desired-
+
+      - name: Compile desired snapshot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node src/cli.ts compile
+
+      - name: Suggested allowlist from Gateway logs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node src/cli.ts suggested
+        continue-on-error: true
+
+      - name: Job summary
+        run: node src/cli.ts summary
+
+      - name: Upload snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: gateway-list-snapshot
+          path: snapshots/
+          if-no-files-found: error
+
+      - name: Store desired snapshot for next run
+        run: |
+          mkdir -p snapshots/previous
+          cp snapshots/desired.json snapshots/previous/desired.json
+
+      - name: Save desired snapshot cache
+        uses: actions/cache/save@v6
+        with:
+          path: snapshots/previous/desired.json
+          key: gateway-list-desired-${{ github.run_id }}
+
+  apply:
+    needs: compile
+    if: >
+      github.event_name != 'pull_request' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.apply) ||
+        (github.event_name == 'schedule' && vars.AUTO_APPLY == 'true')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download compiled snapshot
+        uses: actions/download-artifact@v8
+        with:
+          name: gateway-list-snapshot
+          path: snapshots
+
+      - name: Apply compiled snapshot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node src/cli.ts apply
+
+      - name: Safety abort note
+        if: failure()
+        run: |
+          {
+            echo "## Apply aborted"
+            echo
+            echo "Apply failed. Tripwires or the API refused the run."
+            echo "No further rule updates should be assumed."
+            echo "Inspect the apply step log. Do not attach rules to empty lists."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Keep scheduled workflow enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow enable "${{ github.workflow }}"

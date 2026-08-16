@@ -1,0 +1,23 @@
+node_modules/
+.env
+.DS_Store
+in-practice.txt
+*.log
+npm-debug.log*
+
+# Local compile output. last-applied.json is written after a real apply
+# (Phase 6+) and should stay untracked unless you choose to commit it.
+# account-quota.json is live Cloudflare list IDs/counts from compile/lists.
+snapshots/desired.json
+snapshots/diff.json
+snapshots/dropped.json
+snapshots/sources.json
+snapshots/last-applied.json
+snapshots/account-quota.json
+snapshots/summary.md
+snapshots/suggested.json
+snapshots/previous/
+snapshots/cache/
+
+# Generated from live Gateway DNS. Last week's blocked queries — do not commit.
+allowlist/suggested.txt

@@ -1,0 +1,3 @@
+# Personal blocklist. One domain per line.
+# Use this for domains you want blocked that OISD Small does not cover.
+# Lines starting with # // ! are comments.

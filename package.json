@@ -1,0 +1,31 @@
+{
+  "name": "cloudflare-zero-trust-gateway-list-cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GitOps CLI for Cloudflare Zero Trust Gateway allow/block lists",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "bin": {
+    "gateway-list": "./src/cli.ts"
+  },
+  "scripts": {
+    "gateway-list": "node src/cli.ts",
+    "compile": "node src/cli.ts compile",
+    "summary": "node src/cli.ts summary",
+    "lists": "node src/cli.ts lists",
+    "diff": "node src/cli.ts diff",
+    "apply": "node src/cli.ts apply",
+    "why": "node src/cli.ts why",
+    "suggested": "node src/cli.ts suggested",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "tldts": "^7.4.10",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0"
+  }
+}

@@ -1,0 +1,270 @@
+cloudflare-zero-trust-gateway-list-CLI
+Feasibility study
+=================
+
+Date: 2026-08-14
+Purpose: keep the prior design conversation so later phases do not
+re-litigate settled decisions. This is not a spec; roadmap.txt is the
+build order. This file is the "why".
+
+Question that started this
+--------------------------
+Build something like mrrfv/cloudflare-gateway-pihole-scripts (CGPS) that
+can live in a private GitHub repo, run weekly via Actions, and manage
+Cloudflare Zero Trust Gateway allowlists and blocklists — but better than
+CGPS.
+
+
+What CGPS actually is
+---------------------
+CGPS is a Node script collection, not a desired-state tool.
+
+Scripts:
+- download_lists.js        merge remote allow/block URLs into txt files
+- cf_list_create.js        parse, subtract allow from block, sync lists
+- cf_list_delete.js        delete lists named "CGPS List*"
+- cf_gateway_rule_create.js  upsert one Block rule (optional SNI/L4)
+- cf_gateway_rule_delete.js  delete those rules
+- cf_defragment.js         reshuffle entries by description timestamp
+
+Default GitHub Action:
+- cron Monday 03:00 UTC
+- checks out mrrfv/cloudflare-gateway-pihole-scripts @ v1
+  (the private repo is treated as a secret bag, not the code)
+- downloads recommended allow + block URLs
+- npm run cloudflare-create (lists then rule)
+
+Cloudflare facts it depends on (still true as of 2026-04/07 docs):
+- Gateway DOMAIN lists: 1,000 items/list on Standard, 5,000 on Enterprise
+- Free/Standard total about 300 lists x 1,000 = 300,000 entries
+- Gateway Lists API: 600 requests/minute; exceed → blocked 120 seconds
+- PATCH /accounts/{id}/gateway/lists/{list_id}
+  body: { append: [{value, description}], remove: ["domain"] }
+- DNS policies are first-match by precedence (lower number wins)
+- Official recommended pack starts with All-DNS-Domain-Allowlist
+  (Allow, precedence 0):
+    any(dns.domains[*] in $list) or dns.fqdn in $list
+  then security-category Block, then custom block lists
+- Hostname lists do not accept wildcards (*.example.com)
+- Non-Latin domains are stored as Punycode
+
+
+Why CGPS is the wrong model
+---------------------------
+1. Allowlist is compile-time subtraction, not a Gateway Allow policy.
+
+   CGPS drops allowlisted domains from the uploaded block set, then
+   installs only:
+
+     any(dns.domains[*] in $block_chunk)
+
+   That selector matches suffix labels. If example.com is blocked,
+   good.example.com is blocked even if it was subtracted from the
+   uploaded list. This is the open whitelist issue (#8):
+   googletagmanager.com, adservice.google.com, etc.
+
+   Cloudflare's own recommended policy is a dedicated Allow rule at
+   higher precedence. That is the correctness fix.
+
+2. The default Action checks out upstream v1, not the private repo.
+
+   Custom parsers, local allow files, and supply-chain control do not
+   run unless the user rewrites the workflow. A private-repo tool must
+   execute *this* repository.
+
+3. No safety gate, no review, no rollback.
+
+   Weekly job mutates production. A 404, a 80% list shrink, or a parser
+   bug is applied blindly. downloadFiles() does not check HTTP status,
+   has no checksum, and one dead URL fails or (historically) poisons
+   the merge. Issues #157 and #249.
+
+4. The incremental sync has holes.
+
+   - list items: only the first page (per_page=1000)
+   - HTTP 200 + success:false treated as OK
+   - 429 → sleep 2 minutes, up to 50 retries (blows Actions time)
+   - upsertZeroTrustRule reads existingRule.name when missing
+   - no tests
+
+5. The 300k quota is spent badly.
+
+   Ads, trackers, and malware are dumped into the same chunks.
+   Cloudflare security categories already cover malware / phishing / C2
+   and should be a separate Block policy, not list entries.
+   When over budget, CGPS truncates the file from the top instead of
+   scoring by source priority.
+
+6. Personal lists are not first-class.
+
+   Actions take multiline ALLOWLIST_URLS / BLOCKLIST_URLS variables.
+   In a private repo the natural source of truth is git files:
+   allowlist/personal.txt and blocklist/personal.txt.
+
+7. Parser is a handful of string replaces.
+
+   Hosts comments, Adblock modifiers, IDN, and Public Suffix (co.uk)
+   are not handled. extractDomain can treat a public suffix as a
+   foldable parent.
+
+8. Delete-all-recreate was the original update path.
+
+   Later PATCH sync is the right direction, but a window of no
+   filtering plus rate-limit storms is still a footgun if anyone
+   re-enables deletion.
+
+
+What "better" means for this repo
+---------------------------------
+Not a cleaner CGPS. A GitOps reconciler:
+
+  sources.yaml-equivalent (config.yaml)
+  + allowlist/ + blocklist/          desired state in git
+           |
+           v
+        compile                      parse, normalise, fold, budget
+           |
+           v
+     snapshot + diff                 reviewable, revertible
+           |
+           v
+         apply                       PATCH drift only; upsert policies
+
+CLI (settled names):
+
+  compile   fetch + compile + write snapshots/desired.json
+  diff      compare desired vs live Gateway
+  apply     mutate Cloudflare to match desired
+  why       explain one domain (source, fold, allow, policy)
+
+CLI binary name: gateway-list
+  node src/cli.ts <command>
+
+
+Policy pack (settled)
+---------------------
+Only manage rules and lists whose names start with "gateway-list".
+Never delete human-created objects.
+
+  precedence 1000  gateway-list:allow
+    action: allow
+    any(dns.domains[*] in $allow) or dns.fqdn in $allow
+
+  precedence 2000  gateway-list:security
+    action: block
+    Cloudflare security categories (malware, phishing, C2, …)
+
+  precedence 3000  gateway-list:block
+    action: block
+    any(dns.domains[*] in $block_chunk_n) or …
+
+Compile-time subtraction and parent-fold still happen, to save quota.
+The Allow policy is the correctness source.
+
+SNI / L4 filtering stays off unless explicitly enabled later. It needs
+WARP and has a privacy cost.
+
+
+Quota strategy (settled)
+------------------------
+1. Security class → Cloudflare categories, not list slots.
+2. Default ads/tracker source: OISD Small only.
+   Do not merge Hagezi Pro / OISD Big by default.
+3. Personal allow and personal block always admitted.
+4. Remaining room filled by lower-priority sources if added later.
+5. Fold blocked children under a blocked parent before counting 300k.
+6. Overflow → snapshots/dropped.json, never silent truncate.
+
+
+Private Actions design (settled)
+--------------------------------
+- Code lives in this repo. Renovate may bump Actions versions.
+- Never actions/checkout another filter-list manager.
+- Weekly compile is enough for ads lists. Malware is categories.
+- Apply is opt-in (workflow_dispatch / AUTO_APPLY) and tripwire-gated:
+    source shrunk more than abort_if_source_shrinks_pct
+    allowlist lost more than abort_if_allowlist_shrinks
+    single run adds more than abort_if_adds_over
+- Job Summary is the weekly report.
+- CLOUDFLARE_API_TOKEN = secret
+  CLOUDFLARE_ACCOUNT_ID = variable
+  max items = config.yaml, not a secret
+- Token scope: Zero Trust read/edit only. No Global API Key.
+- Keepalive required: GitHub disables scheduled workflows after ~60
+  days with no repository activity. Scheduled runs do not count.
+
+
+Source integrity (settled)
+--------------------------
+- Required sources (OISD Small, personal files) fail the run on error.
+- Record hash, line count, URL, fetch time.
+- Large shrink vs last successful snapshot aborts before apply.
+- Do not treat HTTP 404 as an empty list.
+
+
+Compiler rules that CGPS got wrong
+----------------------------------
+- Allow maps.google.com does not remove google.com from the block set.
+- Allow example.com *does* win at runtime for foo.example.com, via the
+  Allow policy (Domain-in-list / dns.domains suffix).
+- Block example.com means ads.example.com need not be uploaded.
+- Do not fold on a public suffix (co.uk, com.hk, github.io).
+- Store/compare Punycode.
+- Personal priority > remote priority.
+
+
+Observability (later, Phase 8–9)
+--------------------------------
+why <domain> should answer:
+  matched policy, source ids, parent-folded?, allow-hit?, dropped?
+
+Optional later: Gateway DNS activity → allowlist/suggested.txt
+for human review. Never auto-merge into personal.
+
+
+What we will not do
+-------------------
+- Put 300k domains in Terraform state. Policies could be TF later;
+  list payloads stay in this CLI.
+- Default-on SNI/L4.
+- Default huge blocklists.
+- Silent recommended allow URL bundle (CGPS ships ~12).
+- Delete-all as the happy path.
+- Checkout upstream CGPS to "stay updated".
+
+
+Technical choices for this skeleton
+-----------------------------------
+- TypeScript on Node 22+, erasable syntax (no enums/namespaces) so
+  `node src/cli.ts` runs without a build step.
+- One runtime dependency: yaml (config.yaml is a required interface).
+- @types/node as a dev dependency for editors.
+- No Cloudflare write in Phase 0. apply exits non-zero.
+- Snapshots are JSON artifacts, not a database.
+
+Language/source decisions from the user (2026-08-14):
+- TypeScript, not Go
+- Conservative default block: OISD Small
+- First implementation slice: roadmap + skeleton only
+- Later conversations implement one roadmap phase at a time
+
+
+References
+----------
+CGPS
+  https://github.com/mrrfv/cloudflare-gateway-pihole-scripts
+  Issue #8 whitelist
+  Issue #144 incremental list update
+  Issue #157 SSL / download errors
+  Issue #249 allowlist URL 404
+
+Cloudflare
+  https://developers.cloudflare.com/cloudflare-one/reusable-components/lists/
+  https://developers.cloudflare.com/cloudflare-one/traffic-policies/dns-policies/
+  https://developers.cloudflare.com/cloudflare-one/traffic-policies/order-of-enforcement/
+  https://developers.cloudflare.com/learning-paths/secure-internet-traffic/build-dns-policies/recommended-dns-policies/
+  PATCH lists:
+  https://developers.cloudflare.com/api/resources/zero_trust/subresources/gateway/subresources/lists/methods/edit/
+
+OISD Small
+  https://small.oisd.nl/

@@ -1,0 +1,48 @@
+# Desired state for Cloudflare Zero Trust Gateway lists.
+# Personal files always win over remote sources.
+
+plan:
+  max_items: 300000
+  items_per_list: 1000
+  list_name_prefix: gateway-list
+
+sources:
+  allow:
+    - id: personal
+      path: allowlist/personal.txt
+      priority: 100
+      required: true
+
+  block:
+    - id: personal-block
+      path: blocklist/personal.txt
+      priority: 90
+      required: true
+    - id: oisd-small
+      url: https://small.oisd.nl/
+      format: adblock
+      priority: 40
+      required: true
+    - id: hagezi-light
+      url: https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/light.txt
+      format: adblock
+      priority: 30
+      required: true
+
+safety:
+  abort_if_source_shrinks_pct: 40
+  abort_if_allowlist_shrinks: 10
+  abort_if_adds_over: 50000
+  require_review_if_removes_over: 1000
+
+policies:
+  allow:
+    name: gateway-list:allow
+    precedence: 1000
+  security:
+    name: gateway-list:security
+    precedence: 2000
+    enabled: true
+  block:
+    name: gateway-list:block
+    precedence: 3000

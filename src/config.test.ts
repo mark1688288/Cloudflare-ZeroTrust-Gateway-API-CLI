@@ -1,0 +1,197 @@
+import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { loadConfig, parseConfig } from "./config.ts";
+import { repoRoot } from "./paths.ts";
+
+const validRaw = {
+  plan: {
+    max_items: 300000,
+    items_per_list: 1000,
+    list_name_prefix: "gateway-list",
+  },
+  sources: {
+    allow: [
+      {
+        id: "personal",
+        path: "allowlist/personal.txt",
+        priority: 100,
+        required: true,
+      },
+    ],
+    block: [
+      {
+        id: "personal-block",
+        path: "blocklist/personal.txt",
+        priority: 90,
+        required: true,
+      },
+      {
+        id: "oisd-small",
+        url: "https://small.oisd.nl/",
+        format: "adblock",
+        priority: 40,
+        required: true,
+      },
+    ],
+  },
+  safety: {
+    abort_if_source_shrinks_pct: 40,
+    abort_if_allowlist_shrinks: 10,
+    abort_if_adds_over: 50000,
+    require_review_if_removes_over: 1000,
+  },
+  policies: {
+    allow: { name: "gateway-list:allow", precedence: 1000 },
+    security: { name: "gateway-list:security", precedence: 2000, enabled: true },
+    block: { name: "gateway-list:block", precedence: 3000 },
+  },
+};
+
+function cloneValid(): typeof validRaw {
+  return structuredClone(validRaw);
+}
+
+function throwsPath(raw: unknown, path: RegExp, fileLabel?: string): void {
+  assert.throws(
+    () => (fileLabel === undefined ? parseConfig(raw) : parseConfig(raw, fileLabel)),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, path);
+      return true;
+    },
+  );
+}
+
+test("repo config.yaml loads and marks oisd-small as adblock", async () => {
+  const config = await loadConfig("config.yaml");
+  const oisd = config.sources.block.find((source) => source.id === "oisd-small");
+  assert.ok(oisd);
+  assert.equal(oisd.format, "adblock");
+  assert.equal(oisd.url, "https://small.oisd.nl/");
+  assert.equal(oisd.path, undefined);
+});
+
+test("valid fixture parses", () => {
+  const config = parseConfig(cloneValid());
+  assert.equal(config.plan.maxItems, 300000);
+  assert.equal(config.plan.maxLists, undefined);
+  assert.equal(config.sources.allow[0]?.id, "personal");
+  assert.equal(config.sources.block[1]?.format, "adblock");
+});
+
+test("optional plan.max_lists parses and rejects 0", () => {
+  const raw = cloneValid();
+  (raw.plan as { max_lists?: number }).max_lists = 200;
+  assert.equal(parseConfig(raw).plan.maxLists, 200);
+  (raw.plan as { max_lists?: number }).max_lists = 0;
+  throwsPath(raw, /plan\.max_lists: expected an integer >= 1/);
+});
+
+test("missing required key cites a dotted path", () => {
+  const raw = cloneValid();
+  // @ts-expect-error intentional
+  delete raw.plan.max_items;
+  throwsPath(raw, /^config\.yaml: plan\.max_items: expected a number$/);
+});
+
+test("errors use the real file label", () => {
+  throwsPath({ plan: [] }, /\/tmp\/other\.yaml: plan: expected a mapping/, "/tmp/other.yaml");
+});
+
+test("source needs path or url", () => {
+  const raw = cloneValid();
+  raw.sources.allow[0] = { id: "x", priority: 1, required: true } as (typeof validRaw)["sources"]["allow"][0];
+  throwsPath(raw, /sources\.allow\[0\]: needs path or url/);
+});
+
+test("source cannot have both path and url", () => {
+  const raw = cloneValid();
+  raw.sources.allow[0] = {
+    id: "x",
+    path: "allowlist/personal.txt",
+    url: "https://example.com/list.txt",
+    priority: 1,
+    required: true,
+  } as (typeof validRaw)["sources"]["allow"][0];
+  throwsPath(raw, /sources\.allow\[0\]: use path or url, not both/);
+});
+
+test("duplicate source id across allow and block", () => {
+  const raw = cloneValid();
+  raw.sources.block[0].id = "personal";
+  throwsPath(raw, /sources\.block\[0\]\.id: duplicate source id "personal" \(already sources\.allow\[0\]\)/);
+});
+
+test("numeric range checks", () => {
+  const cases: Array<{ mutate: (raw: typeof validRaw) => void; path: RegExp }> = [
+    {
+      mutate: (raw) => {
+        raw.plan.max_items = 0;
+      },
+      path: /plan\.max_items: expected an integer >= 1/,
+    },
+    {
+      mutate: (raw) => {
+        raw.plan.items_per_list = 5001;
+      },
+      path: /plan\.items_per_list: expected an integer <= 5000/,
+    },
+    {
+      mutate: (raw) => {
+        raw.plan.items_per_list = 1.5;
+      },
+      path: /plan\.items_per_list: expected an integer/,
+    },
+    {
+      mutate: (raw) => {
+        raw.sources.allow[0].priority = 1.2;
+      },
+      path: /sources\.allow\[0\]\.priority: expected an integer/,
+    },
+    {
+      mutate: (raw) => {
+        raw.safety.abort_if_source_shrinks_pct = 101;
+      },
+      path: /safety\.abort_if_source_shrinks_pct: expected an integer <= 100/,
+    },
+    {
+      mutate: (raw) => {
+        raw.policies.allow.precedence = -1;
+      },
+      path: /policies\.allow\.precedence: expected an integer >= 0/,
+    },
+    {
+      mutate: (raw) => {
+        raw.policies.allow.precedence = 3000;
+        raw.policies.block.precedence = 1000;
+      },
+      path: /policies: expected policies\.allow\.precedence < policies\.security\.precedence < policies\.block\.precedence/,
+    },
+  ];
+
+  for (const { mutate, path } of cases) {
+    const raw = cloneValid();
+    mutate(raw);
+    throwsPath(raw, path);
+  }
+});
+
+test("loadConfig missing file names the path", async () => {
+  await assert.rejects(
+    () => loadConfig("snapshots/does-not-exist.yaml"),
+    /snapshots\/does-not-exist\.yaml: file not found \(/,
+  );
+});
+
+test("loadConfig opens an absolute path", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gateway-list-cfg-"));
+  const abs = join(dir, "custom.yaml");
+  const { stringify } = await import("yaml");
+  await writeFile(abs, stringify(cloneValid()), "utf8");
+  const config = await loadConfig(abs);
+  assert.equal(config.plan.listNamePrefix, "gateway-list");
+  assert.ok(!abs.startsWith(repoRoot));
+});

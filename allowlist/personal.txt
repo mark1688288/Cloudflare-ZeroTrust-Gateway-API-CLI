@@ -1,0 +1,7 @@
+# Personal allowlist. One domain per line.
+# These always win over remote block sources.
+# Lines starting with # // ! are comments.
+#
+# Example:
+github.com
+raw.githubusercontent.com
