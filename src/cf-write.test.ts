@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { createCfClient } from "./cf-client.ts";
-import { assertOwnedName, createGatewayList, patchGatewayList } from "./cf-write.ts";
+import { assertOwnedName, createAsnGatewayList, createGatewayList, patchGatewayList } from "./cf-write.ts";
 import { repoRoot } from "./paths.ts";
 
 const TOKEN = "cfut_test_token_do_not_leak";
@@ -59,6 +59,29 @@ test("patchGatewayList GETs then refuses a foreign list", async () => {
     /refusing to mutate/,
   );
   assert.deepEqual(methods, ["GET"]);
+});
+
+test("createAsnGatewayList posts type IP and refuses a non-ASN name", async () => {
+  const bodies: unknown[] = [];
+  const client = createCfClient({
+    token: TOKEN,
+    accountId: "acct",
+    sleep: async () => undefined,
+    fetch: (async (_input, init) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return jsonResponse({ success: true, result: { id: "L1", name: "AS10206" } });
+    }) as typeof fetch,
+  });
+  await assert.rejects(
+    () => createAsnGatewayList(client, { name: "gateway-list:allow", items: [{ value: "1.0.0.0/24" }] }),
+    /refusing to mutate/,
+  );
+  const made = await createAsnGatewayList(client, {
+    name: "AS10206 China Unicom Zhongwei Cloud",
+    items: [{ value: "14.1.0.0/16" }],
+  });
+  assert.equal(made.id, "L1");
+  assert.equal((bodies[0] as { type: string }).type, "IP");
 });
 
 test("compile / diff / why / lists / cli do not import cf-write", () => {

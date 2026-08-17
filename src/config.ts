@@ -61,10 +61,10 @@ function expectBoolean(value: unknown, path: string, fallback: boolean): boolean
 
 function parseFormat(value: unknown, path: string): SourceFormat | undefined {
   if (value === undefined) return undefined;
-  if (value === "hosts" || value === "domains" || value === "adblock") {
+  if (value === "hosts" || value === "domains" || value === "adblock" || value === "mmdb") {
     return value;
   }
-  fail(path, "format must be hosts | domains | adblock");
+  fail(path, "format must be hosts | domains | adblock | mmdb");
 }
 
 function parseSource(value: unknown, path: string): SourceConfig {
@@ -95,11 +95,36 @@ function parseSources(value: unknown, path: string): SourceConfig[] {
   return value.map((item, index) => parseSource(item, `${path}[${index}]`));
 }
 
+function parseDomainSources(value: unknown, path: string): SourceConfig[] {
+  const list = parseSources(value, path);
+  for (const [index, source] of list.entries()) {
+    if (source.format === "mmdb") {
+      fail(`${path}[${index}].format`, "mmdb is only valid under sources.asn");
+    }
+  }
+  return list;
+}
+
+function parseAsnSources(value: unknown, path: string): SourceConfig[] {
+  const list = parseSources(value, path);
+  for (const [index, source] of list.entries()) {
+    if (!source.url) {
+      fail(`${path}[${index}]`, "ASN source needs url");
+    }
+    if (source.format !== undefined && source.format !== "mmdb") {
+      fail(`${path}[${index}].format`, "must be mmdb");
+    }
+    source.format = "mmdb";
+  }
+  return list;
+}
+
 function assertUniqueSourceIds(config: Config): void {
   const seen = new Map<string, string>();
   const groups = [
     ["sources.allow", config.sources.allow],
     ["sources.block", config.sources.block],
+    ["sources.asn", config.sources.asn],
   ] as const;
   for (const [group, list] of groups) {
     for (const [index, source] of list.entries()) {
@@ -153,8 +178,9 @@ export function parseConfig(raw: unknown, fileLabel = "config.yaml"): Config {
             }),
       },
       sources: {
-        allow: parseSources(sources.allow, "sources.allow"),
-        block: parseSources(sources.block, "sources.block"),
+        allow: parseDomainSources(sources.allow, "sources.allow"),
+        block: parseDomainSources(sources.block, "sources.block"),
+        asn: parseAsnSources(sources.asn, "sources.asn"),
       },
       safety: {
         abortIfSourceShrinksPct: expectInteger(

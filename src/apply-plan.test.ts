@@ -20,7 +20,7 @@ function config(over: Partial<Config["plan"]> = {}): Config {
       listNamePrefix: "gateway-list",
       ...over,
     },
-    sources: { allow: [], block: [] },
+    sources: { allow: [], block: [], asn: [] },
     safety: {
       abortIfSourceShrinksPct: 40,
       abortIfAllowlistShrinks: 10,

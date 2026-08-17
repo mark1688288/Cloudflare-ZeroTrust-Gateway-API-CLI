@@ -19,6 +19,10 @@ export function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
+export function sha256Bytes(data: Uint8Array): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+
 export function countLines(text: string): number {
   if (text === "") return 0;
   const parts = text.split(/\r?\n/);

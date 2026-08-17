@@ -36,6 +36,22 @@ const validRaw = {
         required: true,
       },
     ],
+    asn: [
+      {
+        id: "geolite2-asn",
+        url: "https://git.io/GeoLite2-ASN.mmdb",
+        format: "mmdb",
+        priority: 20,
+        required: true,
+      },
+      {
+        id: "geolite2-asn-github",
+        url: "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb",
+        format: "mmdb",
+        priority: 10,
+        required: false,
+      },
+    ],
   },
   safety: {
     abort_if_source_shrinks_pct: 40,
@@ -72,6 +88,10 @@ test("repo config.yaml loads and marks oisd-small as adblock", async () => {
   assert.equal(oisd.format, "adblock");
   assert.equal(oisd.url, "https://small.oisd.nl/");
   assert.equal(oisd.path, undefined);
+  assert.equal(config.sources.asn[0]?.id, "geolite2-asn");
+  assert.equal(config.sources.asn[0]?.format, "mmdb");
+  assert.equal(config.sources.asn[0]?.url, "https://git.io/GeoLite2-ASN.mmdb");
+  assert.equal(config.sources.asn[1]?.id, "geolite2-asn-github");
 });
 
 test("valid fixture parses", () => {
@@ -123,6 +143,42 @@ test("duplicate source id across allow and block", () => {
   const raw = cloneValid();
   raw.sources.block[0].id = "personal";
   throwsPath(raw, /sources\.block\[0\]\.id: duplicate source id "personal" \(already sources\.allow\[0\]\)/);
+});
+
+test("sources.asn is required and must be mmdb urls", () => {
+  const missing = cloneValid();
+  // @ts-expect-error intentional
+  delete missing.sources.asn;
+  throwsPath(missing, /sources\.asn: expected a non-empty list/);
+
+  const pathOnly = cloneValid();
+  pathOnly.sources.asn[0] = {
+    id: "local-asn",
+    path: "snapshots/cache/GeoLite2-ASN.mmdb",
+    priority: 1,
+    required: true,
+  };
+  throwsPath(pathOnly, /sources\.asn\[0\]: ASN source needs url/);
+
+  const badFormat = cloneValid();
+  badFormat.sources.asn[0] = {
+    id: "geolite2-asn",
+    url: "https://git.io/GeoLite2-ASN.mmdb",
+    format: "adblock",
+    priority: 1,
+    required: true,
+  };
+  throwsPath(badFormat, /sources\.asn\[0\]\.format: must be mmdb/);
+
+  const mmdbOnAllow = cloneValid();
+  mmdbOnAllow.sources.allow[0] = {
+    id: "personal",
+    path: "allowlist/personal.txt",
+    format: "mmdb",
+    priority: 100,
+    required: true,
+  };
+  throwsPath(mmdbOnAllow, /sources\.allow\[0\]\.format: mmdb is only valid under sources\.asn/);
 });
 
 test("numeric range checks", () => {

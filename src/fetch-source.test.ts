@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FETCH_ACCEPT_ENCODING, fetchText, HttpError, retryAfterMs } from "./fetch-source.ts";
+import { FETCH_ACCEPT_ENCODING, fetchBytes, fetchText, HttpError, retryAfterMs } from "./fetch-source.ts";
 
 function mockFetch(
   handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
@@ -47,6 +47,23 @@ test("sends one If-None-Match and treats 304 as success", async () => {
   assert.equal(fetched.status, 304);
   assert.equal(fetched.text, "");
   assert.equal(fetched.etag, '"6a7fbb38-13470b"');
+});
+
+test("fetchBytes returns the body and treats 304 as empty success", async () => {
+  const body = Uint8Array.from([1, 2, 3, 4]);
+  const fetched = await fetchBytes("https://git.io/GeoLite2-ASN.mmdb", {
+    fetch: mockFetch(() => new Response(body, { status: 200, headers: { etag: '"m1"' } })),
+  });
+  assert.equal(fetched.status, 200);
+  assert.deepEqual(fetched.bytes, body);
+  assert.equal(fetched.etag, '"m1"');
+
+  const notModified = await fetchBytes("https://git.io/GeoLite2-ASN.mmdb", {
+    ifNoneMatch: '"m1"',
+    fetch: mockFetch(() => new Response(null, { status: 304, headers: { etag: '"m1"' } })),
+  });
+  assert.equal(notModified.status, 304);
+  assert.equal(notModified.bytes.length, 0);
 });
 
 test("404 is not retried", async () => {

@@ -44,6 +44,7 @@ Default sources:
 | block | `blocklist/personal.txt` | git-managed, next |
 | block | [OISD Small](https://small.oisd.nl/) | remote, required |
 | block | [HaGeZi Light](https://github.com/hagezi/dns-blocklists) | remote, required |
+| asn | [GeoLite2-ASN.mmdb](https://github.com/P3TERX/GeoLite.mmdb) | `asn add` / `asn update` only; `compile` ignores this group |
 
 Personal sources always beat remotes (higher priority). If the same domain appears more than once, only the highest-priority entry is kept. Add another remote block source under `sources.block` if you need one; the defaults stay conservative on purpose.
 
@@ -148,7 +149,7 @@ Each list holds at most `items_per_list` items (default 1000). If the traffic fi
 ```bash
 cd Cloudflare-ZeroTrust-Gateway-API-CLI
 npm install
-cp .env.example .env   # token / account id; needed for lists / diff / apply / suggested
+cp .env.example .env   # token / account id; needed for lists / diff / apply / suggested / asn
 
 node src/cli.ts
 ```
@@ -164,6 +165,9 @@ gateway-list> why ads.google.com
 gateway-list> suggested
 gateway-list> apply --dry-run
 gateway-list> apply
+gateway-list> asn add AS13335
+gateway-list> asn update AS13335
+gateway-list> asn update --dashboard
 gateway-list> help
 gateway-list> exit
 ```
@@ -177,7 +181,7 @@ npm test
 
 ## Config
 
-- [`config.yaml`](config.yaml) — sources, account `max_items` (300k), safety thresholds; optional `plan.max_lists`
+- [`config.yaml`](config.yaml) — sources (allow / block / asn), account `max_items` (300k), safety thresholds; optional `plan.max_lists`
 - [`allowlist/personal.txt`](allowlist/personal.txt) — your allow domains (git-managed)
 - [`blocklist/personal.txt`](blocklist/personal.txt) — extra domains you want blocked
 
@@ -221,9 +225,42 @@ gateway-list diff    [--config config.yaml]
 gateway-list apply   [--config config.yaml] [--dry-run]
 gateway-list why     <domain>
 gateway-list suggested
+gateway-list asn add <ASN> [--dry-run]
+gateway-list asn update <ASN> [--dry-run]
+gateway-list asn update --dashboard [--dry-run]
 ```
 
-In the shell the commands are the same (`compile`, `summary`, `lists`, `diff`, `apply`, `why <domain>`, `suggested`), plus `help` and `exit`.
+In the shell the commands are the same (`compile`, `summary`, `lists`, `diff`, `apply`, `why <domain>`, `suggested`, `asn add` / `asn update`), plus `help` and `exit`.
+
+## ASN reusable lists
+
+`asn add` / `asn update` are **not** part of `compile` / `apply`. They create or refresh a Gateway **IP** reusable list from [MaxMind GeoLite2-ASN](https://dev.maxmind.com/geoip/docs/databases/asn/) (`.mmdb`). They **never** attach that list to a Gateway rule, so you pick the policy and precedence in Zero Trust yourself.
+
+```
+node src/cli.ts asn add AS13335
+node src/cli.ts asn update AS13335
+node src/cli.ts asn update --dashboard
+node src/cli.ts asn add AS13335 --dry-run
+```
+
+List name:
+
+- `AS13335` if the database has no organisation
+- `AS13335 CLOUDFLARENET` when GeoLite2-ASN has that name
+
+If the prefix set is larger than `plan.items_per_list`, further chunks are `AS13335-2 …`. IPv6 prefixes more specific than `/64` are collapsed (Gateway IP lists). Adjacent prefixes are merged.
+
+`asn update --dashboard` refreshes **every other** (not `gateway-list*`) type=`IP` reusable list whose name is `AS<number>` or `ASN<number>` — the lists you created in the dashboard or with `asn add`. One GeoLite2 walk, then the same incremental PATCH as `asn update AS…`. An ASN with no prefixes in the database is skipped; the rest still update.
+
+URLs come from `sources.asn` in [`config.yaml`](config.yaml) (tried high priority first). The file is cached at `snapshots/cache/GeoLite2-ASN.mmdb`. These lists do **not** use the `gateway-list` prefix, so `apply` will not patch them or create a rule for them.
+
+To use a list, create a Gateway policy in Zero Trust that references it (name it something other than `gateway-list*`) and set precedence yourself. Typical traffic filter:
+
+```
+any(net.dst.ip in $<list_id>)
+```
+
+This product includes GeoLite2 data created by MaxMind, available from [https://www.maxmind.com](https://www.maxmind.com).
 
 ## License
 

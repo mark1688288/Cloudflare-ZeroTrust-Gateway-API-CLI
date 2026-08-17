@@ -1,4 +1,4 @@
-export type SourceFormat = "hosts" | "domains" | "adblock";
+export type SourceFormat = "hosts" | "domains" | "adblock" | "mmdb";
 
 export type SourceConfig = {
   id: string;
@@ -20,6 +20,7 @@ export type Config = {
   sources: {
     allow: SourceConfig[];
     block: SourceConfig[];
+    asn: SourceConfig[];
   };
   safety: {
     abortIfSourceShrinksPct: number;

@@ -108,6 +108,12 @@ sources:
       path: ${join(dir, "block.txt")}
       priority: 90
       required: true
+  asn:
+    - id: geolite2-asn
+      url: https://git.io/GeoLite2-ASN.mmdb
+      format: mmdb
+      priority: 20
+      required: true
 safety:
   abort_if_source_shrinks_pct: 40
   abort_if_allowlist_shrinks: 10

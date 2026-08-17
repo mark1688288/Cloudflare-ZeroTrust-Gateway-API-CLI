@@ -21,3 +21,6 @@ snapshots/cache/
 
 # Generated from live Gateway DNS. Last week's blocked queries — do not commit.
 allowlist/suggested.txt
+
+# Official MaxMind GeoLite2 test DBs. Do not commit.
+src/testdata/

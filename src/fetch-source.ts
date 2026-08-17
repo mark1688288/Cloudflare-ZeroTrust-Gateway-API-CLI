@@ -32,6 +32,13 @@ export type FetchedText = {
   status: number;
 };
 
+export type FetchedBytes = {
+  url: string;
+  bytes: Uint8Array;
+  etag: string | null;
+  status: number;
+};
+
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 export const DEFAULT_FETCH_MAX_ATTEMPTS = 3;
 export const DEFAULT_FETCH_BACKOFF_MS = 2_000;
@@ -101,6 +108,70 @@ export async function fetchText(url: string, options: FetchTextOptions = {}): Pr
         return {
           url,
           text: "",
+          etag: response.headers.get("etag"),
+          status: 304,
+        };
+      }
+
+      const httpError = new HttpError(url, response.status);
+      if (!httpError.retryable || attempt === maxAttempts) {
+        throw httpError;
+      }
+      lastError = httpError;
+      await sleep(retryAfterMs(response, capMs, backoffMs));
+      continue;
+    } catch (error) {
+      if (error instanceof HttpError && !error.retryable) throw error;
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt === maxAttempts) break;
+      if (error instanceof HttpError) continue;
+      if (isAbortError(error) || lastError.name === "TypeError") {
+        await sleep(backoffMs);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError ?? new Error(`GET ${url}: failed`);
+}
+
+export async function fetchBytes(url: string, options: FetchTextOptions = {}): Promise<FetchedBytes> {
+  const fetchFn = options.fetch ?? fetch;
+  const sleep = options.sleep ?? defaultSleep;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  const maxAttempts = options.maxAttempts ?? DEFAULT_FETCH_MAX_ATTEMPTS;
+  const backoffMs = options.backoffMs ?? DEFAULT_FETCH_BACKOFF_MS;
+  const capMs = options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS;
+
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const headers: Record<string, string> = {
+        accept: "application/octet-stream, application/vnd.maxmind.com-database, */*",
+        "user-agent": USER_AGENT,
+        "accept-encoding": FETCH_ACCEPT_ENCODING,
+      };
+      if (options.ifNoneMatch) headers["if-none-match"] = options.ifNoneMatch;
+
+      const response = await fetchFn(url, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs),
+        headers,
+      });
+
+      if (response.status === 200) {
+        return {
+          url,
+          bytes: new Uint8Array(await response.arrayBuffer()),
+          etag: response.headers.get("etag"),
+          status: 200,
+        };
+      }
+
+      if (response.status === 304) {
+        return {
+          url,
+          bytes: new Uint8Array(),
           etag: response.headers.get("etag"),
           status: 304,
         };

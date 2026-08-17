@@ -54,6 +54,12 @@ sources:
       path: blocklist/personal.txt
       priority: 90
       required: true
+  asn:
+    - id: geolite2-asn
+      url: https://git.io/GeoLite2-ASN.mmdb
+      format: mmdb
+      priority: 20
+      required: true
 safety:
   abort_if_source_shrinks_pct: 40
   abort_if_allowlist_shrinks: 10
@@ -101,6 +107,7 @@ test("--help prints usage and does not start the shell", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /interactive shell/);
   assert.match(result.stdout, /compile/);
+  assert.match(result.stdout, /asn add/);
 });
 
 test("no args starts a shell; help and exit", () => {

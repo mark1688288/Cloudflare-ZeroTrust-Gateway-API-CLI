@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { CloudflareApiError } from "./cf-client.ts";
 import { applyCommand } from "./commands/apply.ts";
+import { asnCommand } from "./commands/asn.ts";
 import { compileCommand } from "./commands/compile.ts";
 import { diffCommand } from "./commands/diff.ts";
 import { listsCommand } from "./commands/lists.ts";
@@ -22,9 +23,13 @@ Usage:
   node src/cli.ts apply   [--config config.yaml] [--dry-run]
   node src/cli.ts why     <domain>
   node src/cli.ts suggested [--config config.yaml]
+  node src/cli.ts asn add <ASNNNN>           [--config config.yaml] [--dry-run]
+  node src/cli.ts asn update <ASNNNN>        [--config config.yaml] [--dry-run]
+  node src/cli.ts asn update --dashboard     [--config config.yaml] [--dry-run]
   node src/cli.ts --help
 
 In the shell, type the same commands, or help / exit.
+  asn add AS10206, asn update AS10206, asn update --dashboard [--dry-run]
 
 Phase 9–11:
   compile  fetches remotes + compiles into snapshots/desired.json
@@ -35,6 +40,7 @@ Phase 9–11:
   apply    PATCH owned lists + upsert policy pack (--dry-run writes nothing)
   why      explain one domain from the compiled snapshot
   suggested  last-week top blocked DNS → allowlist/suggested.txt (never personal)
+  asn      add/update an IP reusable list from GeoLite2-ASN (no rule)
 `;
 
 type Defaults = { configPath: string };
@@ -43,6 +49,7 @@ const PARSE_OPTIONS = {
   help: { type: "boolean", short: "h", default: false },
   config: { type: "string" },
   "dry-run": { type: "boolean", default: false },
+  dashboard: { type: "boolean", default: false },
 } as const;
 
 function tokenize(line: string): string[] {
@@ -119,6 +126,13 @@ async function runCommand(argv: string[], defaults: Defaults): Promise<number> {
       }
       case "suggested":
         return await suggestedCommand({ configPath });
+      case "asn":
+        return await asnCommand({
+          configPath,
+          dryRun: Boolean(values["dry-run"]),
+          dashboard: Boolean(values.dashboard),
+          rest,
+        });
       case "exit":
       case "quit":
         return 0;

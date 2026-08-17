@@ -1,6 +1,6 @@
 {
   "name": "Cloudflare-ZeroTrust-Gateway-API-CLI",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
   "license": "MIT",
   "description": "GitOps CLI for Cloudflare Zero Trust Gateway allow/block lists",
@@ -21,6 +21,7 @@
     "apply": "node src/cli.ts apply",
     "why": "node src/cli.ts why",
     "suggested": "node src/cli.ts suggested",
+    "asn": "node src/cli.ts asn",
     "test": "node --test"
   },
   "dependencies": {

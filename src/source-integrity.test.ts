@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countLines, sha256Hex, sourceContent, sourceShrank } from "./source-integrity.ts";
+import { countLines, sha256Bytes, sha256Hex, sourceContent, sourceShrank } from "./source-integrity.ts";
 import type { SourceRecord } from "./types.ts";
 
 function ok(lineCount: number): SourceRecord {
@@ -28,6 +28,11 @@ test("sha256Hex is stable", () => {
   assert.equal(hex.length, 64);
   assert.equal(sha256Hex("||ads.example.com^\n"), hex);
   assert.notEqual(sha256Hex("a"), sha256Hex("b"));
+});
+
+test("sha256Bytes hashes raw octets", () => {
+  assert.equal(sha256Bytes(Uint8Array.of(1, 2, 3)).length, 64);
+  assert.notEqual(sha256Bytes(Uint8Array.of(1)), sha256Bytes(Uint8Array.of(2)));
 });
 
 test("sourceContent compares usable previous sha256 only", () => {
