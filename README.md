@@ -1,10 +1,12 @@
-# Cloudflare-ZeroTrust-Gateway-API-CLI
+# Cloudflare Zero Trust Gateway GitOps CLI
 
-GitOps CLI for **Cloudflare Zero Trust Gateway** allowlists and blocklists.
+Manage **Cloudflare Gateway** allowlists, blocklists, and ASN IP reusable lists from git.
 
-Files in git are the **desired state**. `compile` fetches sources, folds child domains, and writes a snapshot. After you review that snapshot, `apply` aligns Gateway lists and rules whose names start with `gateway-list`. GitHub Actions compiles weekly; **it does not change Cloudflare unless you opt in**.
+Files in git are the **desired state**. `compile` fetches [OISD](https://small.oisd.nl/), [HaGeZi](https://github.com/hagezi/dns-blocklists), and your personal lists, folds child domains, and writes a snapshot. After you review that snapshot, `apply` incrementally patches Gateway lists and Allow/Block policies whose names start with `gateway-list`. GitHub Actions compiles weekly; **it does not change Cloudflare unless you opt in**.
 
 Allow is its own Gateway list plus an Allow policy with higher precedence than Block. Blocking a parent does not also block a child you have allowed.
+
+Separately, `asn add` / `asn update` create or refresh Gateway **IP** reusable lists from [MaxMind GeoLite2-ASN](https://dev.maxmind.com/geoip/docs/databases/asn/) (`.mmdb`). They never attach a policy — you wire the list in Zero Trust yourself.
 
 ## Workflow
 
