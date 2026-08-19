@@ -34,6 +34,8 @@ Edit allowlist / blocklist / config.yaml
 
 To add a remote source or change a personal list, edit `config.yaml` / the `*.txt` files and run `compile`. A new source is labelled `new` (full GET). Later compiles use ETag + SHA-256 to decide `unchanged` (reuse cache) or `updated` (fetch again). If a block set contains both a parent and a child (for example `tracker.example.com` and `ads.tracker.example.com`), the child is folded away so it does not use a list slot.
 
+<img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_4" src="https://github.com/user-attachments/assets/b2b91e97-c792-4dfe-a7c4-6b0655cc1aab" />
+
 ## Compile
 
 `compile` reads the sources in [`config.yaml`](config.yaml) and merges them into a desired snapshot. It works without a Cloudflare token. With credentials it also reads live list `count` values (read-only), subtracts items on lists you manage by hand, then applies the budget.
@@ -59,6 +61,8 @@ Writes:
 
 All of those are gitignored. Remote bodies are stored at `snapshots/cache/<id>.txt`.
 
+<img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_3" src="https://github.com/user-attachments/assets/752dae21-00d9-46b8-aa12-d77af8e106e4" /><img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_5" src="https://github.com/user-attachments/assets/36cfe9a7-87e1-448b-94f5-ec7feb19dcc8" />
+
 ### ETag and SHA-256
 
 Remotes are not downloaded in full every week. Each compile records the source **ETag** (HTTP) and the **SHA-256** of the body.
@@ -72,6 +76,8 @@ Remotes are not downloaded in full every week. Each compile records the source *
 7. Compare to the previous SHA-256: no previous hash → `new` (first compile, or you added a source); same → `unchanged`; different → `updated`.
 
 A failed cache write does not fail compile; the next run falls back to a full GET. A required remote that parses to 0 domains aborts. An optional source that fails is skipped and marked `optional-failed`.
+
+<img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_6" src="https://github.com/user-attachments/assets/c281348d-8c66-4bf3-8144-315162664cb1" />
 
 ### Fold
 
@@ -120,6 +126,8 @@ Two layers of guards: one stops a truncated download from looking like “delete
 `apply` itself is an **incremental PATCH** (`append` / `remove` of drift only). It never deletes every list and recreates them. The client uses a token bucket (burst 8, refill 4/s) and retries HTTP 429 with `Retry-After` (up to 5 attempts). If other + desired exceeds `max_items`, apply refuses. A tripped guard fails the job — do not assume a half-applied rule set is in effect.
 
 Only lists and rules whose names start with `gateway-list` are managed. Dashboard-created objects are left alone.
+
+<img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_9" src="https://github.com/user-attachments/assets/0918aa70-fbf7-4cb4-a564-0838cccf0c5c" />
 
 ## Policy pack
 
