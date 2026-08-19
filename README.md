@@ -8,6 +8,8 @@ Allow is its own Gateway list plus an Allow policy with higher precedence than B
 
 Separately, `asn add` / `asn update` create or refresh Gateway **IP** reusable lists from [MaxMind GeoLite2-ASN](https://dev.maxmind.com/geoip/docs/databases/asn/) (`.mmdb`). They never attach a policy — you wire the list in Zero Trust yourself.
 
+<img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_13" src="https://github.com/user-attachments/assets/bd73fb06-5f63-4e31-81d8-3bee9bc4d547" />
+
 ## Workflow
 
 Each command does one job: `compile` never writes to Cloudflare, and `apply` never re-fetches sources.
@@ -38,7 +40,7 @@ To add a remote source or change a personal list, edit `config.yaml` / the `*.tx
 
 ## Compile
 
-`compile` reads the sources in [`config.yaml`](config.yaml) and merges them into a desired snapshot. It works without a Cloudflare token. With credentials it also reads live list `count` values (read-only), subtracts items on lists you manage by hand, then applies the budget.
+`compile` reads the sources in [`config.yaml`](config.yaml) and merges them into a desired snapshot. It works without a Cloudflare token. With credentials it also reads live list `count` values (read-only), subtracts items on lists you manage by hand, then applies the [budget](https://github.com/mark1688288/Cloudflare-ZeroTrust-Gateway-API-CLI/tree/main#quota-and-dropped).
 
 Default sources:
 
@@ -269,6 +271,8 @@ To use a list, create a Gateway policy in Zero Trust that references it (name it
 ```
 any(net.dst.ip in $<list_id>)
 ```
+
+<img width="1376" height="768" alt="Cloudflare_Zero_Trust_GitOps_-_Slide_11" src="https://github.com/user-attachments/assets/2c3aa835-8fb6-4f18-a5db-adb37765d13b" />
 
 This product includes GeoLite2 data created by MaxMind, available from [https://www.maxmind.com](https://www.maxmind.com).
 
